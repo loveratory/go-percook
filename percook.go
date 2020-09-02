@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 type CookieJar struct {
@@ -34,11 +37,15 @@ func toKey(u *url.URL, c *http.Cookie) string {
 		// > the default value.
 		// https://tools.ietf.org/html/rfc6265#section-4.1.2.4
 		// see also: https://tools.ietf.org/html/rfc6265#section-5.1.4
-		cu, err := url.Parse("./")
+		cu, err := url.Parse(".")
 		if err != nil {
 			panic(fmt.Errorf("Unexpected, unrecovable parse error: %s", err))
 		}
 		path = stringCoalesceWithDefault("/", u.ResolveReference(cu).Path)
+		if strings.HasSuffix(path, "/") {
+			// remove trailing slash to reproduce same behaviour as above RFC
+			path = path[:len(path)-1]
+		}
 	}
 	return schema + domain + path
 }
@@ -70,27 +77,73 @@ func (pjar *CookieJar) keys() []*url.URL {
 type CookiesMap map[*url.URL][]*http.Cookie
 
 func (pjar *CookieJar) AllCookies() CookiesMap {
-	// same cookie must appear at once
-	cookieByHostPlusCookieStr := make(map[string]*http.Cookie)
-	keysByHostPlusCookieStr := make(map[string][]string)
-	for _, key := range pjar.keys() {
-		keyString := key.String()
-		for _, cookie := range pjar.jar.Cookies(key) {
+	type intermidiate = struct {
+		URLString  *string
+		URL        *url.URL
+		TLDPlusOne *string
+		Cookie     *http.Cookie
+	}
+	intsByCookieNameAndValue := make(map[string][]intermidiate)
+
+	for _, url := range pjar.keys() {
+		url := url
+		if url.Path == "" {
+			// for consistent path
+			url.Path = "/"
+		}
+		urlString := url.String()
+		for _, cookie := range pjar.jar.Cookies(url) {
 			cookie := cookie
-			hpcs := key.Host + cookie.String()
-			cookieByHostPlusCookieStr[hpcs] = cookie
-			keysByHostPlusCookieStr[hpcs] = append(keysByHostPlusCookieStr[hpcs], keyString)
+
+			// domain, secure and path are saved in url,
+			// only name & value needed
+			nameAndValue := cookie.Name + cookie.Value
+
+			tldPlusOne, err := publicsuffix.EffectiveTLDPlusOne(url.Host)
+			if err != nil {
+				// fallback
+				tldPlusOne = url.Host
+			}
+			intsByCookieNameAndValue[nameAndValue] = append(intsByCookieNameAndValue[nameAndValue], intermidiate{
+				URL:        url,
+				URLString:  &urlString,
+				TLDPlusOne: &tldPlusOne,
+				Cookie:     cookie,
+			})
 		}
 	}
-	reversedMap := make(CookiesMap)
-	for hpcs, keys := range keysByHostPlusCookieStr {
-		// shortest key = shortest scope
-		u, _ := url.Parse(stringMin(keys...))
-		copy := *cookieByHostPlusCookieStr[hpcs]
-		copy.Secure = u.Scheme == "https"
-		reversedMap[u] = append(reversedMap[u], &copy)
+
+	cmap := make(CookiesMap)
+
+	// check uniqueness and assign to cmap
+	// same cookie must appear at once
+	for _, ints := range intsByCookieNameAndValue {
+		groupIntsByTLDPlusOne := make(map[string][]*intermidiate)
+		for _, inte := range ints {
+			inte := inte
+			groupIntsByTLDPlusOne[*inte.TLDPlusOne] = append(groupIntsByTLDPlusOne[*inte.TLDPlusOne], &inte)
+		}
+
+		for _, group := range groupIntsByTLDPlusOne {
+			shortest := group[0]
+			shortestLen := len(*group[0].URLString)
+			for _, item := range group {
+				item := item
+				if shortestLen > len(*item.URLString) {
+					shortest = item
+					shortestLen = len(*item.URLString)
+				}
+			}
+
+			// fill cookie fields
+			shortest.Cookie.Secure = shortest.URL.Scheme == "https"
+			shortest.Cookie.Path = shortest.URL.Path
+
+			cmap[shortest.URL] = append(cmap[shortest.URL], shortest.Cookie)
+		}
 	}
-	return reversedMap
+
+	return cmap
 }
 
 func (pjar *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {

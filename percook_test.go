@@ -1,11 +1,11 @@
 package percook
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"reflect"
-	"strconv"
 	"testing"
 )
 
@@ -34,13 +34,14 @@ func TestExportCookie(t *testing.T) {
 		URL     *url.URL
 	}
 	type TestCase struct {
+		Name       string
 		SetCookies []SetCookie
 		Expected   CookiesMap
 	}
 
 	for i, tc := range []TestCase{
 		{
-			// without secure
+			"without secure",
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -57,12 +58,13 @@ func TestExportCookie(t *testing.T) {
 					{
 						Name:  "asdf",
 						Value: "1234",
+						Path:  "/",
 					},
 				},
 			},
 		},
 		{
-			// different paths
+			"different paths",
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -85,18 +87,20 @@ func TestExportCookie(t *testing.T) {
 					{
 						Name:  "asdf",
 						Value: "1234",
+						Path:  "/pp",
 					},
 				},
 				panicParseURL("http://example.com/"): {
 					{
 						Name:  "zxcv",
 						Value: "5678",
+						Path:  "/",
 					},
 				},
 			},
 		},
 		{
-			// one is secure
+			"one is secure",
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -119,18 +123,20 @@ func TestExportCookie(t *testing.T) {
 						Name:   "asdf",
 						Value:  "1234",
 						Secure: true,
+						Path:   "/",
 					},
 				},
 				panicParseURL("http://example.com/"): {
 					{
 						Name:  "zxcv",
 						Value: "5678",
+						Path:  "/",
 					},
 				},
 			},
 		},
 		{
-			// without set-cookie path, but url under subdirectory
+			"without set-cookie path, but url under subdirectory",
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -144,17 +150,18 @@ func TestExportCookie(t *testing.T) {
 				},
 			},
 			CookiesMap{
-				panicParseURL("https://example.com/test/"): {
+				panicParseURL("https://example.com/test"): {
 					{
 						Name:   "asdf",
 						Value:  "1234",
 						Secure: true,
+						Path:   "/test",
 					},
 				},
 			},
 		},
 		{
-			// same name & value with another domain
+			"same name & value with another domain",
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -178,11 +185,12 @@ func TestExportCookie(t *testing.T) {
 				},
 			},
 			CookiesMap{
-				panicParseURL("https://example.com/test/"): {
+				panicParseURL("https://example.com/test"): {
 					{
 						Name:   "asdf",
 						Value:  "1234",
 						Secure: true,
+						Path:   "/test",
 					},
 				},
 				panicParseURL("https://example.jp/"): {
@@ -190,12 +198,13 @@ func TestExportCookie(t *testing.T) {
 						Name:   "asdf",
 						Value:  "1234",
 						Secure: true,
+						Path:   "/",
 					},
 				},
 			},
 		},
 		{
-			// updated value
+			"updated value",
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -219,22 +228,115 @@ func TestExportCookie(t *testing.T) {
 				},
 			},
 			CookiesMap{
-				panicParseURL("https://example.com/test/"): {
+				panicParseURL("https://example.com/test"): {
 					{
 						Name:   "counter",
 						Value:  "2",
 						Secure: true,
+						Path:   "/test",
 					},
 				},
 			},
 		},
 		{
+			"empty",
 			[]SetCookie{},
 			CookiesMap{},
 		},
+		{
+			"subdomain uniqueness",
+			[]SetCookie{
+				{
+					[]*http.Cookie{
+						{
+							Name:   "abcd",
+							Value:  "1234",
+							Secure: true,
+							// including subdomains
+							Domain: "example.com",
+						},
+					},
+					panicParseURL("https://example.com/"),
+				},
+				{
+					[]*http.Cookie{
+						{
+							Name:   "efgh",
+							Value:  "1234",
+							Secure: true,
+						},
+					},
+					panicParseURL("https://sub.example.com/"),
+				},
+			},
+			CookiesMap{
+				panicParseURL("https://example.com/"): {
+					{
+						Name:   "abcd",
+						Value:  "1234",
+						Secure: true,
+						Path:   "/",
+					},
+				},
+				panicParseURL("https://sub.example.com/"): {
+					{
+						Name:   "efgh",
+						Value:  "1234",
+						Secure: true,
+						Path:   "/",
+					},
+				},
+			},
+		},
+		{
+			"subdomain uniqueness w/ path",
+			[]SetCookie{
+				{
+					[]*http.Cookie{
+						{
+							Name:  "abcd",
+							Value: "1234",
+							Path:  "/subdir",
+							// including subdomains
+							Domain: "example.com",
+						},
+					},
+					panicParseURL("https://example.com/"),
+				},
+				{
+					[]*http.Cookie{
+						{
+							Name:   "efgh",
+							Value:  "1234",
+							Secure: true,
+							Path:   "/subdir",
+						},
+					},
+					panicParseURL("https://sub.example.com/"),
+				},
+			},
+			CookiesMap{
+				panicParseURL("http://example.com/subdir"): {
+					{
+						Name:  "abcd",
+						Value: "1234",
+						Path:  "/subdir",
+					},
+				},
+				panicParseURL("https://sub.example.com/subdir"): {
+					{
+						Name:   "efgh",
+						Value:  "1234",
+						Secure: true,
+						Path:   "/subdir",
+					},
+				},
+			},
+		},
 	} {
 		tc := tc
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d-%s", i, tc.Name), func(t *testing.T) {
+			t.Parallel()
 			jar, err := cookiejar.New(&cookiejar.Options{})
 			if err != nil {
 				t.Error(err)
@@ -248,7 +350,8 @@ func TestExportCookie(t *testing.T) {
 			expected := convertCookieMapToStringMap(tc.Expected)
 			actual := convertCookieMapToStringMap(actualOriginal)
 			if !reflect.DeepEqual(expected, actual) {
-				t.Errorf("%#v expected, but %#v returned", expected, actual)
+				t.Errorf("allCookies failed:\n%#v expected, but\n%#v returned", expected, actual)
+				t.FailNow()
 			}
 		})
 	}
