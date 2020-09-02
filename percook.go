@@ -70,24 +70,23 @@ func (pjar *CookieJar) keys() []*url.URL {
 type CookiesMap map[*url.URL][]*http.Cookie
 
 func (pjar *CookieJar) AllCookies() CookiesMap {
-	keys := pjar.keys()
-	cookieByCookieStr := make(map[string]*http.Cookie)
-	cookieKeysMap := make(map[string][]string)
-	for _, key := range keys {
+	// same cookie must appear at once
+	cookieByHostPlusCookieStr := make(map[string]*http.Cookie)
+	keysByHostPlusCookieStr := make(map[string][]string)
+	for _, key := range pjar.keys() {
 		keyString := key.String()
 		for _, cookie := range pjar.jar.Cookies(key) {
 			cookie := cookie
-			cookieStr := cookie.String()
-			cookieByCookieStr[cookieStr] = cookie
-			cookieKeysMap[cookieStr] = append(cookieKeysMap[cookieStr], keyString)
+			hpcs := key.Host + cookie.String()
+			cookieByHostPlusCookieStr[hpcs] = cookie
+			keysByHostPlusCookieStr[hpcs] = append(keysByHostPlusCookieStr[hpcs], keyString)
 		}
 	}
-
 	reversedMap := make(CookiesMap)
-	for cookieStr, keys := range cookieKeysMap {
+	for hpcs, keys := range keysByHostPlusCookieStr {
 		// shortest key = shortest scope
 		u, _ := url.Parse(stringMin(keys...))
-		reversedMap[u] = append(reversedMap[u], cookieByCookieStr[cookieStr])
+		reversedMap[u] = append(reversedMap[u], cookieByHostPlusCookieStr[hpcs])
 	}
 	return reversedMap
 }

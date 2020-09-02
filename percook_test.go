@@ -149,6 +149,45 @@ func TestExportCookie(t *testing.T) {
 			},
 		},
 		{
+			// same name & value with another domain
+			[]SetCookie{
+				{
+					[]*http.Cookie{
+						{
+							Name:   "asdf",
+							Value:  "1234",
+							Secure: true,
+						},
+					},
+					panicParseURL("https://example.com/test/1234"),
+				},
+				{
+					[]*http.Cookie{
+						{
+							Name:   "asdf",
+							Value:  "1234",
+							Secure: true,
+						},
+					},
+					panicParseURL("https://example.jp"),
+				},
+			},
+			CookiesMap{
+				panicParseURL("https://example.com/test/"): {
+					{
+						Name:  "asdf",
+						Value: "1234",
+					},
+				},
+				panicParseURL("https://example.jp/"): {
+					{
+						Name:  "asdf",
+						Value: "1234",
+					},
+				},
+			},
+		},
+		{
 			[]SetCookie{},
 			CookiesMap{},
 		},
