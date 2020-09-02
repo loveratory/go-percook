@@ -40,6 +40,7 @@ func TestExportCookie(t *testing.T) {
 
 	for i, tc := range []TestCase{
 		{
+			// without secure
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -52,7 +53,6 @@ func TestExportCookie(t *testing.T) {
 				},
 			},
 			CookiesMap{
-				// no secure
 				panicParseURL("http://example.com/"): {
 					{
 						Name:  "asdf",
@@ -62,6 +62,7 @@ func TestExportCookie(t *testing.T) {
 			},
 		},
 		{
+			// different paths
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -95,6 +96,7 @@ func TestExportCookie(t *testing.T) {
 			},
 		},
 		{
+			// one is secure
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -127,6 +129,7 @@ func TestExportCookie(t *testing.T) {
 			},
 		},
 		{
+			// without set-cookie path, but url under subdirectory
 			[]SetCookie{
 				{
 					[]*http.Cookie{
@@ -183,6 +186,39 @@ func TestExportCookie(t *testing.T) {
 					{
 						Name:  "asdf",
 						Value: "1234",
+					},
+				},
+			},
+		},
+		{
+			// updated value
+			[]SetCookie{
+				{
+					[]*http.Cookie{
+						{
+							Name:   "counter",
+							Value:  "1",
+							Secure: true,
+						},
+					},
+					panicParseURL("https://example.com/test/1234"),
+				},
+				{
+					[]*http.Cookie{
+						{
+							Name:   "counter",
+							Value:  "2",
+							Secure: true,
+						},
+					},
+					panicParseURL("https://example.com/test/1234"),
+				},
+			},
+			CookiesMap{
+				panicParseURL("https://example.com/test/"): {
+					{
+						Name:  "counter",
+						Value: "2",
 					},
 				},
 			},
