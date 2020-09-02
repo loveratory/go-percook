@@ -55,28 +55,41 @@ func (pjar *CookieJar) storeKey(u *url.URL, c *http.Cookie) {
 	pjar.seenKeys.LoadOrStore(toKey(u, c), struct{}{})
 }
 
-func (pjar *CookieJar) keys() []*url.URL {
+func (pjar *CookieJar) keys() ([]*url.URL, error) {
 	var urls []*url.URL
+	var err error
 	pjar.seenKeys.Range(func(key, _ interface{}) bool {
 		urlString, ok := key.(string)
 		if !ok {
-			panic(fmt.Errorf("Unexpected, non sting key is stored in seenKeys. key=%#v", key))
+			err = fmt.Errorf("Unexpected, non sting key is stored in seenKeys. key=%#v", key)
+			// = break
+			return false
 		}
-		url, err := url.Parse(urlString)
-		if err != nil {
-			panic(fmt.Errorf("Unexpected error, non url-format key is stored in seenKeys. key=%#v, err=%s", key, err))
+		url, uerr := url.Parse(urlString)
+		if uerr != nil {
+			err = fmt.Errorf("Unexpected error, non url-format key is stored in seenKeys. key=%#v, err=%s", key, err)
+			return false
 		}
 		urls = append(urls, url)
-
-		// please don't stop
+		// continue
 		return true
 	})
-	return urls
+
+	if err != nil {
+		return nil, err
+	}
+
+	return urls, nil
 }
 
 type CookiesMap map[*url.URL][]*http.Cookie
 
 func (pjar *CookieJar) AllCookies() CookiesMap {
+	keys, err := pjar.keys()
+	if err != nil {
+		panic(err)
+	}
+
 	type intermidiate = struct {
 		URLString  *string
 		URL        *url.URL
@@ -85,31 +98,38 @@ func (pjar *CookieJar) AllCookies() CookiesMap {
 	}
 	intsByCookieNameAndValue := make(map[string][]intermidiate)
 
-	for _, url := range pjar.keys() {
-		url := url
-		if url.Path == "" {
+	for _, u := range keys {
+		u := u
+		if u.Path == "" {
 			// for consistent path
-			url.Path = "/"
+			u.Path = "/"
 		}
-		urlString := url.String()
-		for _, cookie := range pjar.jar.Cookies(url) {
-			cookie := cookie
+		urlString := u.String()
+		tldPlusOne, err := publicsuffix.EffectiveTLDPlusOne(u.Host)
+		if err != nil {
+			// fallback
+			tldPlusOne = u.Host
+		}
 
-			// domain, secure and path are saved in url,
-			// only name & value needed
-			nameAndValue := cookie.Name + cookie.Value
+		// to check Domain= attribute, check with sloppy subdomain
+		su := *u
+		su.Host = "sloppy." + su.Host
 
-			tldPlusOne, err := publicsuffix.EffectiveTLDPlusOne(url.Host)
-			if err != nil {
-				// fallback
-				tldPlusOne = url.Host
+		for _, u := range []*url.URL{u, &su} {
+			u := u
+			for _, cookie := range pjar.jar.Cookies(u) {
+				cookie := cookie
+
+				// domain, secure and path are saved in url,
+				// only name & value needed
+				nameAndValue := cookie.Name + cookie.Value
+				intsByCookieNameAndValue[nameAndValue] = append(intsByCookieNameAndValue[nameAndValue], intermidiate{
+					URL:        u,
+					URLString:  &urlString,
+					TLDPlusOne: &tldPlusOne,
+					Cookie:     cookie,
+				})
 			}
-			intsByCookieNameAndValue[nameAndValue] = append(intsByCookieNameAndValue[nameAndValue], intermidiate{
-				URL:        url,
-				URLString:  &urlString,
-				TLDPlusOne: &tldPlusOne,
-				Cookie:     cookie,
-			})
 		}
 	}
 
@@ -125,9 +145,11 @@ func (pjar *CookieJar) AllCookies() CookiesMap {
 		}
 
 		for _, group := range groupIntsByTLDPlusOne {
+			domains := make(map[string]struct{})
 			shortest := group[0]
 			shortestLen := len(*group[0].URLString)
 			for _, item := range group {
+				domains[item.URL.Host] = struct{}{}
 				item := item
 				if shortestLen > len(*item.URLString) {
 					shortest = item
@@ -138,6 +160,10 @@ func (pjar *CookieJar) AllCookies() CookiesMap {
 			// fill cookie fields
 			shortest.Cookie.Secure = shortest.URL.Scheme == "https"
 			shortest.Cookie.Path = shortest.URL.Path
+			if len(domains) > 1 {
+				// appear multiple times = cookie is with Domain
+				shortest.Cookie.Domain = shortest.URL.Host
+			}
 
 			cmap[shortest.URL] = append(cmap[shortest.URL], shortest.Cookie)
 		}

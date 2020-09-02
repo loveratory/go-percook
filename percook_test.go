@@ -276,6 +276,7 @@ func TestExportCookie(t *testing.T) {
 						Value:  "1234",
 						Secure: true,
 						Path:   "/",
+						Domain: "example.com",
 					},
 				},
 				panicParseURL("https://sub.example.com/"): {
@@ -318,9 +319,10 @@ func TestExportCookie(t *testing.T) {
 			CookiesMap{
 				panicParseURL("http://example.com/subdir"): {
 					{
-						Name:  "abcd",
-						Value: "1234",
-						Path:  "/subdir",
+						Name:   "abcd",
+						Value:  "1234",
+						Path:   "/subdir",
+						Domain: "example.com",
 					},
 				},
 				panicParseURL("https://sub.example.com/subdir"): {
@@ -329,6 +331,32 @@ func TestExportCookie(t *testing.T) {
 						Value:  "1234",
 						Secure: true,
 						Path:   "/subdir",
+					},
+				},
+			},
+		},
+		{
+			"with Domain=",
+			[]SetCookie{
+				{
+					[]*http.Cookie{
+						{
+							Name:  "abcd",
+							Value: "1234",
+							// including subdomains
+							Domain: "example.jp",
+						},
+					},
+					panicParseURL("https://example.jp/sub"),
+				},
+			},
+			CookiesMap{
+				panicParseURL("http://example.jp/"): {
+					{
+						Name:   "abcd",
+						Value:  "1234",
+						Path:   "/",
+						Domain: "example.jp",
 					},
 				},
 			},
