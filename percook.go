@@ -7,14 +7,15 @@ import (
 	"sync"
 )
 
-type PercookCookieJar struct {
+type CookieJar struct {
 	jar http.CookieJar
 	// [cookieKey]struct{}
 	seenKeys sync.Map
 }
 
-func New(jar http.CookieJar) PercookCookieJar {
-	return PercookCookieJar{jar: jar}
+func New(jar http.CookieJar) *CookieJar {
+	// return pointer because jar & seenKeys must be shared
+	return &CookieJar{jar: jar}
 }
 
 func toKey(u *url.URL, c *http.Cookie) string {
@@ -42,11 +43,12 @@ func toKey(u *url.URL, c *http.Cookie) string {
 	return schema + domain + path
 }
 
-func (pjar *PercookCookieJar) storeKey(u *url.URL, c *http.Cookie) {
+func (pjar *CookieJar) storeKey(u *url.URL, c *http.Cookie) {
+	// avoid locking, load first
 	pjar.seenKeys.LoadOrStore(toKey(u, c), struct{}{})
 }
 
-func (pjar *PercookCookieJar) keys() []*url.URL {
+func (pjar *CookieJar) keys() []*url.URL {
 	var urls []*url.URL
 	pjar.seenKeys.Range(func(key, _ interface{}) bool {
 		urlString, ok := key.(string)
@@ -67,7 +69,7 @@ func (pjar *PercookCookieJar) keys() []*url.URL {
 
 type CookiesMap map[*url.URL][]*http.Cookie
 
-func (pjar *PercookCookieJar) AllCookies() CookiesMap {
+func (pjar *CookieJar) AllCookies() CookiesMap {
 	keys := pjar.keys()
 	cookieByCookieStr := make(map[string]*http.Cookie)
 	cookieKeysMap := make(map[string][]string)
@@ -90,12 +92,12 @@ func (pjar *PercookCookieJar) AllCookies() CookiesMap {
 	return reversedMap
 }
 
-func (pjar *PercookCookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+func (pjar *CookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	for _, c := range cookies {
 		pjar.storeKey(u, c)
 	}
 	pjar.jar.SetCookies(u, cookies)
 }
-func (pjar *PercookCookieJar) Cookies(u *url.URL) []*http.Cookie {
+func (pjar *CookieJar) Cookies(u *url.URL) []*http.Cookie {
 	return pjar.jar.Cookies(u)
 }
