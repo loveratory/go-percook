@@ -116,8 +116,9 @@ func TestExportCookie(t *testing.T) {
 			CookiesMap{
 				panicParseURL("https://example.com/"): {
 					{
-						Name:  "asdf",
-						Value: "1234",
+						Name:   "asdf",
+						Value:  "1234",
+						Secure: true,
 					},
 				},
 				panicParseURL("http://example.com/"): {
@@ -145,8 +146,9 @@ func TestExportCookie(t *testing.T) {
 			CookiesMap{
 				panicParseURL("https://example.com/test/"): {
 					{
-						Name:  "asdf",
-						Value: "1234",
+						Name:   "asdf",
+						Value:  "1234",
+						Secure: true,
 					},
 				},
 			},
@@ -178,14 +180,16 @@ func TestExportCookie(t *testing.T) {
 			CookiesMap{
 				panicParseURL("https://example.com/test/"): {
 					{
-						Name:  "asdf",
-						Value: "1234",
+						Name:   "asdf",
+						Value:  "1234",
+						Secure: true,
 					},
 				},
 				panicParseURL("https://example.jp/"): {
 					{
-						Name:  "asdf",
-						Value: "1234",
+						Name:   "asdf",
+						Value:  "1234",
+						Secure: true,
 					},
 				},
 			},
@@ -217,8 +221,9 @@ func TestExportCookie(t *testing.T) {
 			CookiesMap{
 				panicParseURL("https://example.com/test/"): {
 					{
-						Name:  "counter",
-						Value: "2",
+						Name:   "counter",
+						Value:  "2",
+						Secure: true,
 					},
 				},
 			},

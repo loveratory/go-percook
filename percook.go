@@ -86,7 +86,9 @@ func (pjar *CookieJar) AllCookies() CookiesMap {
 	for hpcs, keys := range keysByHostPlusCookieStr {
 		// shortest key = shortest scope
 		u, _ := url.Parse(stringMin(keys...))
-		reversedMap[u] = append(reversedMap[u], cookieByHostPlusCookieStr[hpcs])
+		copy := *cookieByHostPlusCookieStr[hpcs]
+		copy.Secure = u.Scheme == "https"
+		reversedMap[u] = append(reversedMap[u], &copy)
 	}
 	return reversedMap
 }
