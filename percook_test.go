@@ -353,6 +353,22 @@ func TestExportCookie(t *testing.T) {
 				t.Errorf("allCookies failed:\n%#v expected, but\n%#v returned", expected, actual)
 				t.FailNow()
 			}
+
+			// check restoring
+			restoreJar, err := cookiejar.New(&cookiejar.Options{})
+			if err != nil {
+				t.Error(err)
+				t.FailNow()
+			}
+			rpjar := New(restoreJar)
+			for url, cookies := range actualOriginal {
+				rpjar.SetCookies(url, cookies)
+			}
+			restoredActualOriginal := rpjar.AllCookies()
+			restoredActual := convertCookieMapToStringMap(restoredActualOriginal)
+			if !reflect.DeepEqual(expected, restoredActual) {
+				t.Errorf("reverse restoring failed:\n%#v expected, but\n%#v returned", expected, actual)
+			}
 		})
 	}
 }
